@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Mapping, Optional, Sequence
 
 from metricflow_semantic_interfaces.call_parameter_sets import (
     JinjaCallParameterSets,
@@ -34,13 +34,16 @@ class JinjaObjectParser:
     def parse_item_descriptions(
         where_sql_template: str,
         valid_method_mapping: ValidMethodMapping = ConfiguredValidMethodMapping.DEFAULT_MAPPING,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> Sequence[ObjectBuilderItemDescription]:
         """Parses the filter and returns the item descriptions."""
         text_processor = ObjectBuilderTextProcessor()
 
         try:
             return text_processor.collect_descriptions_from_template(
-                jinja_template=where_sql_template, valid_method_mapping=valid_method_mapping
+                jinja_template=where_sql_template,
+                valid_method_mapping=valid_method_mapping,
+                jinja_params=jinja_params,
             )
         except Exception as e:
             raise ParseJinjaObjectException(f"Error while parsing Jinja template:\n{where_sql_template}") from e
@@ -50,6 +53,7 @@ class JinjaObjectParser:
         where_sql_template: str,
         custom_granularity_names: Sequence[str],
         query_item_location: QueryItemLocation,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> JinjaCallParameterSets:
         """Return the result of extracting the semantic objects referenced in the where SQL template string."""
         valid_method_mapping = (
@@ -58,7 +62,7 @@ class JinjaObjectParser:
             else ConfiguredValidMethodMapping.DEFAULT_MAPPING
         )
         descriptions = JinjaObjectParser.parse_item_descriptions(
-            where_sql_template, valid_method_mapping=valid_method_mapping
+            where_sql_template, valid_method_mapping=valid_method_mapping, jinja_params=jinja_params
         )
 
         """

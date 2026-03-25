@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Protocol, Sequence, Tuple
+from typing import Mapping, Optional, Protocol, Sequence, Tuple
 
 from metricflow_semantic_interfaces.call_parameter_sets import JinjaCallParameterSets
 
@@ -16,8 +16,17 @@ class WhereFilter(Protocol):
         pass
 
     @abstractmethod
-    def call_parameter_sets(self, custom_granularity_names: Sequence[str]) -> JinjaCallParameterSets:
-        """Describe calls like 'dimension(...)' in the SQL template."""
+    def call_parameter_sets(
+        self,
+        custom_granularity_names: Sequence[str],
+        *,
+        jinja_params: Optional[Mapping[str, str]] = None,
+    ) -> JinjaCallParameterSets:
+        """Describe calls like 'dimension(...)' in the SQL template.
+
+        When validating metric filters that reference ``{{ params.name }}``, pass placeholder values keyed by
+        declared param names so the Jinja sandbox can render the template.
+        """
         pass
 
 
@@ -44,7 +53,10 @@ class WhereFilterIntersection(Protocol):
 
     @abstractmethod
     def filter_expression_parameter_sets(
-        self, custom_granularity_names: Sequence[str]
+        self,
+        custom_granularity_names: Sequence[str],
+        *,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> Sequence[Tuple[str, JinjaCallParameterSets]]:
         """Mapping from distinct filter expressions to the call parameter sets associated with them.
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import textwrap
 import traceback
-from typing import Callable, Generator, List, Sequence, Tuple
+from typing import Callable, Generator, List, Mapping, Optional, Sequence, Tuple
 
 from typing_extensions import Self
 
@@ -50,11 +50,17 @@ class PydanticWhereFilter(PydanticCustomInputParser, HashableBaseModel):
         else:
             raise ValueError(f"Expected input to be of type string, but got type {type(input)} with value: {input}")
 
-    def call_parameter_sets(self, custom_granularity_names: Sequence[str]) -> JinjaCallParameterSets:  # noqa: D102
+    def call_parameter_sets(
+        self,
+        custom_granularity_names: Sequence[str],
+        *,
+        jinja_params: Optional[Mapping[str, str]] = None,
+    ) -> JinjaCallParameterSets:  # noqa: D102
         return JinjaObjectParser.parse_call_parameter_sets(
             where_sql_template=self.where_sql_template,
             custom_granularity_names=custom_granularity_names,
             query_item_location=QueryItemLocation.NON_ORDER_BY,
+            jinja_params=jinja_params,
         )
 
 
@@ -120,7 +126,10 @@ class PydanticWhereFilterIntersection(HashableBaseModel):
             )
 
     def filter_expression_parameter_sets(
-        self, custom_granularity_names: Sequence[str]
+        self,
+        custom_granularity_names: Sequence[str],
+        *,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> List[Tuple[str, JinjaCallParameterSets]]:
         """Gets the call parameter sets for each filter expression."""
         filter_parameter_sets: List[Tuple[str, JinjaCallParameterSets]] = []
@@ -130,7 +139,10 @@ class PydanticWhereFilterIntersection(HashableBaseModel):
                 filter_parameter_sets.append(
                     (
                         where_filter.where_sql_template,
-                        where_filter.call_parameter_sets(custom_granularity_names=custom_granularity_names),
+                        where_filter.call_parameter_sets(
+                            custom_granularity_names=custom_granularity_names,
+                            jinja_params=jinja_params,
+                        ),
                     )
                 )
             except Exception as e:

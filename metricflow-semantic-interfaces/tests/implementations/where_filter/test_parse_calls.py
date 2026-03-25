@@ -295,3 +295,30 @@ def test_time_dimension_with_custom_granularity() -> None:  # noqa: D103
         ),
         entity_call_parameter_sets=(),
     )
+
+
+def test_call_parameter_sets_with_metric_param_placeholders() -> None:
+    """Metric filters may reference {{ params.x }}; validation passes placeholders when parsing."""
+    parse_result = PydanticWhereFilter(
+        where_sql_template="{{ Dimension('product__name') }} = '{{ params.product_name }}'"
+    ).call_parameter_sets(
+        custom_granularity_names=(),
+        jinja_params={"product_name": "__METRIC_PARAM_PLACEHOLDER__"},
+    )
+    assert parse_result == JinjaCallParameterSets(
+        dimension_call_parameter_sets=(
+            DimensionCallParameterSet(
+                dimension_reference=DimensionReference(element_name="name"),
+                entity_path=(EntityReference("product"),),
+            ),
+        ),
+        entity_call_parameter_sets=(),
+    )
+
+
+def test_call_parameter_sets_without_metric_param_placeholder_fails() -> None:
+    """Without jinja_params, {{ params.x }} is undefined in the object-builder sandbox."""
+    with pytest.raises(ParseJinjaObjectException):
+        PydanticWhereFilter(
+            where_sql_template="{{ Dimension('product__name') }} = '{{ params.product_name }}'"
+        ).call_parameter_sets(custom_granularity_names=())

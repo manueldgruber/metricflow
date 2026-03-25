@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from textwrap import indent
-from typing import List, Sequence
+from typing import List, Mapping, Optional, Sequence
 
 from jinja2 import StrictUndefined, TemplateSyntaxError, UndefinedError
 from jinja2.exceptions import SecurityError
@@ -51,13 +51,16 @@ class ObjectBuilderTextProcessor:
         self,
         jinja_template: str,
         valid_method_mapping: ValidMethodMapping,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> Sequence[ObjectBuilderItemDescription]:
         """Returns the `ObjectBuilderItemDescription`s that are found in a Jinja template.
 
         Args:
             jinja_template: A Jinja-template string like `{{ Dimension('listing__country') }} = 'US'`.
             valid_method_mapping: Mapping from the builder object to the valid methods. See
-            `ConfiguredValidMethodMapping`.
+                `ConfiguredValidMethodMapping`.
+            jinja_params: When set, passed to the Jinja render context as ``params`` (e.g. placeholder values for
+                ``{{ params.name }}`` in metric filter templates during validation).
 
         Returns:
             A sequence of the descriptions found in the template.
@@ -71,6 +74,7 @@ class ObjectBuilderTextProcessor:
             jinja_template=jinja_template,
             valid_method_mapping=valid_method_mapping,
             description_processor=description_collector,
+            jinja_params=jinja_params,
         )
         return description_collector.collected_descriptions()
 
@@ -79,23 +83,27 @@ class ObjectBuilderTextProcessor:
         jinja_template: str,
         valid_method_mapping: ValidMethodMapping,
         description_processor: ObjectBuilderItemDescriptionProcessor,
+        jinja_params: Optional[Mapping[str, str]] = None,
     ) -> str:
         """Helper to run a `ObjectBuilderItemDescriptionProcessor` on a Jinja template."""
         render_helper = ObjectBuilderJinjaRenderHelper(
             description_processor=description_processor,
             valid_method_mapping=valid_method_mapping,
         )
+        render_kwargs = dict(
+            Dimension=render_helper.get_function_for_dimension(),
+            TimeDimension=render_helper.get_function_for_time_dimension(),
+            Entity=render_helper.get_function_for_entity(),
+            Metric=render_helper.get_function_for_metric(),
+        )
+        if jinja_params is not None:
+            render_kwargs["params"] = jinja_params
         try:
             # the string that the sandbox renders is unused
             rendered = (
                 SandboxedEnvironment(undefined=StrictUndefined)
                 .from_string(jinja_template)
-                .render(
-                    Dimension=render_helper.get_function_for_dimension(),
-                    TimeDimension=render_helper.get_function_for_time_dimension(),
-                    Entity=render_helper.get_function_for_entity(),
-                    Metric=render_helper.get_function_for_metric(),
-                )
+                .render(**render_kwargs)
             )
         except (UndefinedError, TemplateSyntaxError, SecurityError) as e:
             raise QueryItemJinjaException(
