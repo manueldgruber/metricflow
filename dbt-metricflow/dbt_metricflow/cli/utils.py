@@ -84,6 +84,20 @@ def query_options(function: Callable) -> Callable:
             "  Multiple metrics: --metrics bookings,messages"
         ),
     )(function)
+    function = click.option(
+        "--param",
+        "metric_param_args",
+        multiple=True,
+        type=str,
+        help=(
+            "Runtime value for a metric parameter declared in the semantic manifest (repeatable).\n\n"
+            "With a single metric: use param_name=value.\n"
+            "With multiple metrics or a saved query: use metric_name.param_name=value.\n\n"
+            "Examples:\n\n"
+            "  --metrics product_attachment_rate --param product_name=XY --param min_spend=100\n\n"
+            "  --metrics m1,m2 --param m1.a=1 --param m2.b=2"
+        ),
+    )(function)
     return function
 
 

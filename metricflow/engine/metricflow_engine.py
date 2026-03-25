@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Dict, Optional
 
 from dbt_semantic_interfaces.enum_extension import assert_values_exhausted
 from dbt_semantic_interfaces.implementations.elements.dimension import PydanticDimensionTypeParams
@@ -145,6 +145,8 @@ class MetricFlowQueryRequest:
     order_output_columns_by_input_order: The columns in the output are arranged in groups as described in
     `CreateSelectColumnsForInstances`. If this is set to True, the order of the columns in each group follows the order
     as described by inputs (e.g. `metric_names`).
+    metric_params: Per-metric runtime parameter values for parameterized metrics. Outer keys are metric names; inner keys
+        are param names declared on that metric in the semantic manifest.
     """
 
     request_id: MetricFlowRequestId
@@ -165,6 +167,7 @@ class MetricFlowQueryRequest:
     dataflow_plan_optimizations: frozenset[DataflowPlanOptimization]
     query_type: MetricFlowQueryType
     order_output_columns_by_input_order: bool
+    metric_params: Optional[Dict[str, Dict[str, str]]] = None
 
     @staticmethod
     def create(  # noqa: D102
@@ -186,6 +189,7 @@ class MetricFlowQueryRequest:
         min_max_only: bool = False,
         apply_group_by: bool = True,
         order_output_columns_by_input_order: bool = False,
+        metric_params: Optional[Dict[str, Dict[str, str]]] = None,
     ) -> MetricFlowQueryRequest:
         return MetricFlowQueryRequest(
             request_id=MetricFlowRequestId(mf_rid=f"{mf_random_id()}") if request_id is None else request_id,
@@ -210,6 +214,7 @@ class MetricFlowQueryRequest:
             min_max_only=min_max_only,
             apply_group_by=apply_group_by,
             order_output_columns_by_input_order=order_output_columns_by_input_order,
+            metric_params=metric_params,
         )
 
     def with_request_id(self, request_id: MetricFlowRequestId) -> MetricFlowQueryRequest:  # noqa: D102
@@ -232,6 +237,7 @@ class MetricFlowQueryRequest:
             dataflow_plan_optimizations=self.dataflow_plan_optimizations,
             query_type=self.query_type,
             order_output_columns_by_input_order=self.order_output_columns_by_input_order,
+            metric_params=self.metric_params,
         )
 
 
@@ -568,6 +574,7 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
                 order_by_names=mf_query_request.order_by_names,
                 order_by_parameters=mf_query_request.order_by,
                 apply_group_by=mf_query_request.apply_group_by,
+                metric_params=mf_query_request.metric_params,
             ).query_spec
         else:
             query_spec = self._query_parser.parse_and_validate_query(
@@ -583,6 +590,7 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
                 order_by=mf_query_request.order_by,
                 min_max_only=mf_query_request.min_max_only,
                 apply_group_by=mf_query_request.apply_group_by,
+                metric_params=mf_query_request.metric_params,
             ).query_spec
         logger.debug(LazyFormat("Parsed query", query_spec=query_spec))
 

@@ -1,8 +1,8 @@
 # Internal dependencies
 dbt-core>=1.10.4, <1.11.0
 
-# dsi version should be fixed by MetricFlow/dbt-core, not set here
-dbt-semantic-interfaces
+# Fork branch with metric params (aligned with metricflow requirements)
+dbt-semantic-interfaces @ git+https://github.com/manueldgruber/dbt-semantic-interfaces.git@feat/metric-params
 
 # CLI-related
 Jinja2>=3.1.6, <3.7.0

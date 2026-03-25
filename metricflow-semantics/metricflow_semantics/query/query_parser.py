@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple, Union
 
@@ -33,6 +34,7 @@ from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_patt
     DefaultWhereFilterPatternFactory,
     WhereFilterPatternFactory,
 )
+from metricflow_semantics.query.metric_params_validation import validate_metric_params_for_query
 from metricflow_semantics.query.group_by_item.group_by_item_resolver import GroupByItemResolver
 from metricflow_semantics.query.group_by_item.resolution_dag.dag import GroupByItemResolutionDag
 from metricflow_semantics.query.issues.issues_base import MetricFlowQueryResolutionIssueSet
@@ -100,6 +102,7 @@ class MetricFlowQueryParser:
         order_by_names: Optional[Sequence[str]] = None,
         order_by_parameters: Optional[Sequence[OrderByQueryParameter]] = None,
         apply_group_by: bool = True,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
     ) -> ParseQueryResult:
         """Parse and validate a query using parameters from a pre-defined / saved query.
 
@@ -134,6 +137,7 @@ class MetricFlowQueryParser:
             order_by=order_by_parameters,
             min_max_only=False,
             apply_group_by=apply_group_by,
+            metric_params=metric_params,
         )
 
     def _get_saved_query(self, saved_query_parameter: SavedQueryParameter) -> SavedQuery:
@@ -400,6 +404,7 @@ class MetricFlowQueryParser:
         order_by: Optional[Sequence[OrderByQueryParameter]] = None,
         min_max_only: bool = False,
         apply_group_by: bool = True,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
     ) -> ParseQueryResult:
         """Parse the query into spec objects, validating them in the process.
 
@@ -421,6 +426,7 @@ class MetricFlowQueryParser:
             order_by=order_by,
             min_max_only=min_max_only,
             apply_group_by=apply_group_by,
+            metric_params=metric_params,
         )
 
     @log_runtime()
@@ -439,6 +445,7 @@ class MetricFlowQueryParser:
         order_by: Optional[Sequence[OrderByQueryParameter]],
         min_max_only: bool,
         apply_group_by: bool,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]],
     ) -> ParseQueryResult:
         if min_max_only and (metric_names or metrics):
             raise InvalidQueryException("Cannot use min_max_only param for queries with metrics.")
@@ -449,6 +456,13 @@ class MetricFlowQueryParser:
 
         metric_names = metric_names or ()
         metrics = metrics or ()
+
+        queried_metric_names = tuple(metric_names) + tuple(m.name for m in metrics)
+        validate_metric_params_for_query(
+            manifest_lookup=self._manifest_lookup,
+            queried_metric_names=queried_metric_names,
+            metric_params=metric_params,
+        )
 
         group_by_names = group_by_names or ()
         group_by = group_by or ()

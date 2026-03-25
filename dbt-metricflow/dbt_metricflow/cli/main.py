@@ -11,7 +11,7 @@ import time
 import warnings
 from importlib.metadata import version as pkg_version
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import click
 import jinja2
@@ -30,6 +30,7 @@ from dbt_metricflow.cli.dbt_connectors.dbt_config_accessor import dbtArtifacts
 from dbt_metricflow.cli.tutorial import (
     dbtMetricFlowTutorialHelper,
 )
+from dbt_metricflow.cli.metric_params_cli import parse_metric_params_from_cli
 from dbt_metricflow.cli.utils import (
     exception_handler,
     query_options,
@@ -176,6 +177,7 @@ def _click_echo(message: str, quiet: bool) -> None:
 @log_call(module_name=__name__, telemetry_reporter=_telemetry_reporter)
 def query(
     cfg: CLIConfiguration,
+    metric_param_args: Optional[Tuple[str, ...]] = None,
     metrics: Optional[Sequence[str]] = None,
     group_by: Optional[Sequence[str]] = None,
     where: Optional[str] = None,
@@ -215,6 +217,7 @@ def query(
         time_constraint_end=end_time,
         where_constraints=[where] if where else None,
         order_by_names=order,
+        metric_params=parse_metric_params_from_cli(metric_param_args, metrics),
     )
 
     explain_result: Optional[MetricFlowExplainResult] = None
