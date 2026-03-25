@@ -6,6 +6,7 @@ some confusing names like "ResolverInputForQuery" -> "QueryResolverInput". Impro
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -214,6 +215,7 @@ class ResolverInputForQuery(MetricFlowQueryResolverInput):
     limit_input: ResolverInputForLimit
     min_max_only: ResolverInputForMinMaxOnly
     apply_group_by: ResolverInputForApplyGroupBy
+    metric_params: Optional[Mapping[str, Mapping[str, str]]] = None
 
     @property
     @override

@@ -30,6 +30,7 @@ from dbt_semantic_interfaces.validations.validator_helpers import (
     ValidationWarning,
 )
 from metricflow_semantics.model.semantic_manifest_lookup import SemanticManifestLookup
+from metricflow_semantics.query.metric_params_validation import metric_params_placeholders_for_dw_validation
 from metricflow_semantics.specs.dunder_column_association_resolver import DunderColumnAssociationResolver
 from metricflow_semantics.specs.instance_spec import LinkableInstanceSpec
 from metricflow_semantics.specs.simple_metric_input_spec import SimpleMetricInputSpec
@@ -479,13 +480,19 @@ class DataWarehouseTaskBuilder:
         for metric in manifest.metrics:
             if metric_filters is not None and metric.name not in metric_filters:
                 continue
+            param_placeholders = metric_params_placeholders_for_dw_validation(metric)
+            metric_params_for_task = (
+                {metric.name: param_placeholders} if param_placeholders is not None else None
+            )
             tasks.append(
                 DataWarehouseValidationTask(
                     query_and_params_callable=partial(
                         cls._gen_explain_query_task_query_and_params,
                         mf_engine=mf_engine,
                         mf_request=MetricFlowQueryRequest.create(
-                            metric_names=[metric.name], group_by_names=[DataSet.metric_time_dimension_name()]
+                            metric_names=[metric.name],
+                            group_by_names=[DataSet.metric_time_dimension_name()],
+                            metric_params=metric_params_for_task,
                         ),
                     ),
                     context=MetricContext(

@@ -232,6 +232,8 @@ class DataflowPlanBuilder:
             column_association_resolver=self._column_association_resolver,
             spec_resolution_lookup=query_spec.filter_spec_resolution_lookup,
             custom_grain_names=self._semantic_model_lookup.custom_granularity_names,
+            metric_lookup=self._metric_lookup,
+            metric_params=query_spec.metric_params,
         )
 
         query_level_filter_specs = tuple(
@@ -934,6 +936,8 @@ class DataflowPlanBuilder:
                 spec_resolution_lookup=base_query_spec.filter_spec_resolution_lookup
                 or FilterSpecResolutionLookUp.empty_instance(),
                 custom_grain_names=self._semantic_model_lookup.custom_granularity_names,
+                metric_lookup=self._metric_lookup,
+                metric_params=base_query_spec.metric_params,
             )
 
             query_level_filter_specs = filter_spec_factory.create_from_where_filter_intersection(
@@ -1552,7 +1556,8 @@ class DataflowPlanBuilder:
             where_filter_specs = tuple(
                 filter_spec_factory.create_from_where_filter_intersection(
                     filter_location=WhereFilterLocation.for_input_metric(
-                        input_metric_reference=input_metric.as_reference
+                        input_metric_reference=input_metric.as_reference,
+                        derived_metric_reference=metric_reference,
                     ),
                     filter_intersection=input_metric.filter,
                 )

@@ -4,8 +4,10 @@ import textwrap
 
 import pytest
 from dbt_semantic_interfaces.parsing.objects import YamlConfigFile
+from dbt_semantic_interfaces.references import MetricReference
 
 from metricflow_semantics.errors.error_classes import InvalidQueryException
+from metricflow_semantics.query.metric_params_validation import metric_params_placeholders_for_dw_validation
 from metricflow_semantics.query.query_parser import MetricFlowQueryParser
 from metricflow_semantics.test_helpers.example_project_configuration import (
     EXAMPLE_PROJECT_CONFIGURATION_YAML_CONFIG_FILE,
@@ -77,3 +79,11 @@ def test_metric_params_succeeds_when_required_supplied(bookings_with_param_parse
         group_by_names=(_BOOKINGS_TIME_GROUP_BY,),
         metric_params={"bookings_with_region": {"region": "US"}},
     )
+
+
+def test_metric_params_placeholders_for_dw_validation(bookings_with_param_parser: MetricFlowQueryParser) -> None:
+    """Warehouse validation (EXPLAIN) uses these placeholders for required params."""
+    metric = bookings_with_param_parser._manifest_lookup.metric_lookup.get_metric(
+        MetricReference(element_name="bookings_with_region")
+    )
+    assert metric_params_placeholders_for_dw_validation(metric) == {"region": "__MF_DW_VALIDATION__"}

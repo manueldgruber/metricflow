@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import List, Optional, Sequence
 
 import jinja2
@@ -8,7 +9,11 @@ from dbt_semantic_interfaces.implementations.filters.where_filter import Pydanti
 from dbt_semantic_interfaces.protocols import WhereFilter, WhereFilterIntersection
 
 from metricflow_semantics.errors.error_classes import RenderSqlTemplateException
+from metricflow_semantics.model.semantics.metric_lookup import MetricLookup
 from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_location import WhereFilterLocation
+from metricflow_semantics.query.group_by_item.filter_spec_resolution.metric_param_jinja import (
+    jinja_params_for_where_filter_location,
+)
 from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_spec_lookup import (
     FilterSpecResolutionLookUp,
 )
@@ -35,10 +40,14 @@ class WhereFilterSpecFactory:
         column_association_resolver: ColumnAssociationResolver,
         spec_resolution_lookup: FilterSpecResolutionLookUp,
         custom_grain_names: Sequence[str],
+        metric_lookup: Optional[MetricLookup] = None,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
     ) -> None:
         self._column_association_resolver = column_association_resolver
         self._spec_resolution_lookup = spec_resolution_lookup
         self._custom_grain_names = tuple(custom_grain_names)
+        self._metric_lookup = metric_lookup
+        self._metric_params = metric_params
 
     def create_from_where_filter(  # noqa: D102
         self,
@@ -91,13 +100,22 @@ class WhereFilterSpecFactory:
             try:
                 # If there was an error with the template, it should have been caught while resolving the specs for
                 # the filters during query resolution.
+                render_context = {
+                    "Dimension": dimension_factory.create,
+                    "TimeDimension": time_dimension_factory.create,
+                    "Entity": entity_factory.create,
+                    "Metric": metric_factory.create,
+                }
+                if self._metric_lookup is not None:
+                    jinja_params = jinja_params_for_where_filter_location(
+                        location=filter_location,
+                        metric_params=self._metric_params,
+                        metric_lookup=self._metric_lookup,
+                    )
+                    if jinja_params is not None:
+                        render_context["params"] = jinja_params
                 where_sql = jinja2.Template(where_filter.where_sql_template, undefined=jinja2.StrictUndefined).render(
-                    {
-                        "Dimension": dimension_factory.create,
-                        "TimeDimension": time_dimension_factory.create,
-                        "Entity": entity_factory.create,
-                        "Metric": metric_factory.create,
-                    }
+                    render_context
                 )
             except (jinja2.exceptions.UndefinedError, jinja2.exceptions.TemplateSyntaxError) as e:
                 raise RenderSqlTemplateException(

@@ -4,7 +4,7 @@ import itertools
 import logging
 import time
 from collections import defaultdict
-from collections.abc import Set
+from collections.abc import Mapping, Set
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -429,11 +429,13 @@ class MetricFlowQueryResolver:
     def _build_filter_spec_lookup(
         self,
         resolution_dag: GroupByItemResolutionDag,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]],
     ) -> FilterSpecResolutionLookUp:
         where_filter_spec_resolver = WhereFilterSpecResolver(
             manifest_lookup=self._manifest_lookup,
             resolution_dag=resolution_dag,
             spec_pattern_factory=self._where_filter_pattern_factory,
+            metric_params=metric_params,
         )
 
         return where_filter_spec_resolver.resolve_lookup()
@@ -538,7 +540,10 @@ class MetricFlowQueryResolver:
             mappings_to_merge.append(resolve_order_by_result.input_to_issue_set_mapping)
 
         # Resolve all where filters in the DAG and generate mappings if there are issues.
-        filter_spec_lookup = self._build_filter_spec_lookup(resolution_dag)
+        filter_spec_lookup = self._build_filter_spec_lookup(
+            resolution_dag=resolution_dag,
+            metric_params=resolver_input_for_query.metric_params,
+        )
         for filter_spec_resolution in filter_spec_lookup.spec_resolutions:
             if filter_spec_resolution.issue_set.has_issues:
                 mappings_to_merge.append(
@@ -687,6 +692,7 @@ class MetricFlowQueryResolver:
                     group_by_item_specs=group_by_item_specs,
                     metric_specs=metric_specs,
                 ),
+                metric_params=resolver_input_for_query.metric_params,
             ),
             resolution_dag=resolution_dag,
             filter_spec_lookup=filter_spec_lookup,

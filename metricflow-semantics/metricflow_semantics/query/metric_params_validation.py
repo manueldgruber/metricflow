@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Final, Optional
+from typing import Dict, Final, Optional
 
 from dbt_semantic_interfaces.protocols.metric import Metric
 from dbt_semantic_interfaces.references import MetricReference
@@ -12,6 +12,36 @@ from metricflow_semantics.errors.error_classes import InvalidQueryException, Met
 from metricflow_semantics.model.semantic_manifest_lookup import SemanticManifestLookup
 
 _ALLOWED_PARAM_TYPES: Final = frozenset({"string", "int", "float"})
+
+_PLACEHOLDER_STRING_DW_VALIDATION: Final = "__MF_DW_VALIDATION__"
+
+
+def metric_params_placeholders_for_dw_validation(metric: Metric) -> Optional[Dict[str, str]]:
+    """Build placeholder param values so EXPLAIN / data-warehouse validation can run.
+
+    ``mf validate-configs`` issues a minimal metric query per metric. Required params with no default would
+    otherwise fail :func:`validate_metric_params_for_query`. Placeholders satisfy that validation and use
+    type-correct strings for ``int`` / ``float`` params; they are not meant as real analytics inputs.
+
+    Returns:
+        A mapping of param name -> placeholder string, or ``None`` if no placeholders are needed.
+    """
+    if not metric.params:
+        return None
+    placeholders: Dict[str, str] = {}
+    for p in metric.params:
+        if not (p.required and p.default is None):
+            continue
+        if p.type == "string":
+            placeholders[p.name] = _PLACEHOLDER_STRING_DW_VALIDATION
+        elif p.type == "int":
+            placeholders[p.name] = "0"
+        elif p.type == "float":
+            placeholders[p.name] = "0.0"
+        else:
+            # Invalid types are caught by manifest validation; skip so we do not emit unknown keys.
+            continue
+    return placeholders or None
 
 
 def validate_metric_params_for_query(

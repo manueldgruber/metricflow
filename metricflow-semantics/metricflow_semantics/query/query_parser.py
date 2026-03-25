@@ -600,6 +600,7 @@ class MetricFlowQueryParser:
             filter_input=resolver_input_for_filter,
             min_max_only=resolver_input_for_min_max_only,
             apply_group_by=resolver_input_for_apply_group_by,
+            metric_params=metric_params,
         )
 
         logger.debug(

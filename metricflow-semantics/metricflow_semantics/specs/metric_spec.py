@@ -52,6 +52,7 @@ class MetricSpec(InstanceSpec):  # noqa: D101
         metric_input: MetricInput,
         filter_spec_factory: WhereFilterSpecFactory,
         additional_filter_specs: Optional[Iterable[WhereFilterSpec]] = None,
+        derived_metric_reference: Optional[MetricReference] = None,
     ) -> MetricSpec:
         filter_specs: list[WhereFilterSpec] = []
         if metric_input.filter is not None:
@@ -59,6 +60,7 @@ class MetricSpec(InstanceSpec):  # noqa: D101
                 filter_spec_factory.create_from_where_filter_intersection(
                     filter_location=WhereFilterLocation.for_input_metric(
                         metric_input.as_reference,
+                        derived_metric_reference=derived_metric_reference,
                     ),
                     filter_intersection=metric_input.filter,
                 )

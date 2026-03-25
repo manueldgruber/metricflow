@@ -16,6 +16,9 @@ FilterSpecResolutionLookUp(
               element_name='monthly_metric_0',
             ),
           ),
+          derived_metric_reference=MetricReference(
+            element_name='derived_metric_with_common_filtered_metric_0',
+          ),
         ),
         call_parameter_set=TimeDimensionCallParameterSet(
           time_dimension_reference=TimeDimensionReference(
@@ -74,6 +77,9 @@ FilterSpecResolutionLookUp(
             MetricReference(
               element_name='monthly_metric_0',
             ),
+          ),
+          derived_metric_reference=MetricReference(
+            element_name='derived_metric_with_common_filtered_metric_1',
           ),
         ),
         call_parameter_set=TimeDimensionCallParameterSet(

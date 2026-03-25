@@ -12,6 +12,9 @@ FilterSpecResolutionLookUp(
               element_name='derived_metric_with_same_parent_time_grains',
             ),
           ),
+          derived_metric_reference=MetricReference(
+            element_name='metric_derived_from_homogeneous_derived_metric',
+          ),
         ),
         call_parameter_set=TimeDimensionCallParameterSet(
           time_dimension_reference=TimeDimensionReference(

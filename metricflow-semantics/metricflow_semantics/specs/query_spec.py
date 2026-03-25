@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
 
@@ -73,6 +74,7 @@ class MetricFlowQuerySpec(SerializableDataclass):
     input_spec_order: InputSpecOrder = field(
         default_factory=lambda: InputSpecOrder(group_by_item_specs=(), metric_specs=())
     )
+    metric_params: Optional[Mapping[str, Mapping[str, str]]] = None
 
     @property
     def linkable_specs(self) -> LinkableSpecSet:  # noqa: D102
@@ -99,6 +101,7 @@ class MetricFlowQuerySpec(SerializableDataclass):
             min_max_only=self.min_max_only,
             apply_group_by=self.apply_group_by,
             input_spec_order=self.input_spec_order,
+            metric_params=self.metric_params,
         )
 
     def without_aliases(self) -> MetricFlowQuerySpec:
@@ -124,4 +127,5 @@ class MetricFlowQuerySpec(SerializableDataclass):
                 group_by_item_specs=tuple(spec.with_alias(None) for spec in self.input_spec_order.group_by_item_specs),
                 metric_specs=tuple(metric_spec.with_alias(None) for metric_spec in self.input_spec_order.metric_specs),
             ),
+            metric_params=self.metric_params,
         )

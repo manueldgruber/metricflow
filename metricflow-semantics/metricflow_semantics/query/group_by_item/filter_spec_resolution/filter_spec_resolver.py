@@ -3,6 +3,7 @@ from __future__ import annotations
 import itertools
 import logging
 from collections import defaultdict
+from collections.abc import Mapping
 from typing import Dict, List, Optional, Sequence, Set, Union
 
 from dbt_semantic_interfaces.call_parameter_sets import JinjaCallParameterSets, MetricCallParameterSet
@@ -19,6 +20,9 @@ from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_loca
 )
 from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_pattern_factory import (
     WhereFilterPatternFactory,
+)
+from metricflow_semantics.query.group_by_item.filter_spec_resolution.metric_param_jinja import (
+    jinja_params_for_where_filter_location,
 )
 from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_spec_lookup import (
     FilterSpecResolution,
@@ -75,10 +79,12 @@ class WhereFilterSpecResolver:
         manifest_lookup: SemanticManifestLookup,
         resolution_dag: GroupByItemResolutionDag,
         spec_pattern_factory: WhereFilterPatternFactory,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
     ) -> None:
         self._manifest_lookup = manifest_lookup
         self._resolution_dag = resolution_dag
         self.spec_pattern_factory = spec_pattern_factory
+        self._metric_params = metric_params
 
     def resolve_lookup(self) -> FilterSpecResolutionLookUp:
         """Find all where filters and return a lookup that provides the specs for the included group-by-items."""
@@ -91,6 +97,7 @@ class WhereFilterSpecResolver:
         visitor = _ResolveWhereFilterSpecVisitor(
             manifest_lookup=self._manifest_lookup,
             spec_pattern_factory=self.spec_pattern_factory,
+            metric_params=self._metric_params,
         )
         return self._resolution_dag.sink_node.accept(visitor)
 
@@ -104,11 +111,15 @@ class _ResolveWhereFilterSpecVisitor(GroupByItemResolutionNodeVisitor[FilterSpec
     """
 
     def __init__(
-        self, manifest_lookup: SemanticManifestLookup, spec_pattern_factory: WhereFilterPatternFactory
+        self,
+        manifest_lookup: SemanticManifestLookup,
+        spec_pattern_factory: WhereFilterPatternFactory,
+        metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
     ) -> None:
         self._manifest_lookup = manifest_lookup
         self._path_from_start_node_tracker = DagTraversalPathTracker()
         self._spec_pattern_factory = spec_pattern_factory
+        self._metric_params = metric_params
 
     @staticmethod
     def _dedupe_filter_call_parameter_sets(
@@ -319,7 +330,8 @@ class _ResolveWhereFilterSpecVisitor(GroupByItemResolutionNodeVisitor[FilterSpec
             child_metric_input = metric_input_location.get_metric_input(self._manifest_lookup.metric_lookup)
             if child_metric_input.filter is not None:
                 input_metric_filter_location = WhereFilterLocation.for_input_metric(
-                    input_metric_reference=metric_node.metric_reference
+                    input_metric_reference=metric_node.metric_reference,
+                    derived_metric_reference=metric_input_location.derived_metric_reference,
                 )
                 for input_metric_where_filter in child_metric_input.filter.where_filters:
                     where_filters_and_locations[input_metric_filter_location].add(input_metric_where_filter)
@@ -349,10 +361,16 @@ class _ResolveWhereFilterSpecVisitor(GroupByItemResolutionNodeVisitor[FilterSpec
         )
         # No input metric in locations when we get here
         for location, where_filters in where_filters_and_locations.items():
+            jinja_params = jinja_params_for_where_filter_location(
+                location=location,
+                metric_params=self._metric_params,
+                metric_lookup=self._manifest_lookup.metric_lookup,
+            )
             for where_filter in where_filters:
                 try:
                     filter_call_parameter_sets = where_filter.call_parameter_sets(
-                        custom_granularity_names=self._manifest_lookup.semantic_model_lookup.custom_granularity_names
+                        custom_granularity_names=self._manifest_lookup.semantic_model_lookup.custom_granularity_names,
+                        jinja_params=jinja_params,
                     )
                 except Exception as e:
                     non_parsable_resolutions.append(

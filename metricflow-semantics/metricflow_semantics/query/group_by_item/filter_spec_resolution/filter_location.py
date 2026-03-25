@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from dbt_semantic_interfaces.dataclass_serialization import SerializableDataclass
 from dbt_semantic_interfaces.references import MetricReference
@@ -32,6 +32,8 @@ class WhereFilterLocation(SerializableDataclass):
     location_type: WhereFilterLocationType
     # These should be sorted for consistency in comparisons.
     metric_references: Tuple[MetricReference, ...]
+    # For INPUT_METRIC: the derived metric that owns this input (used to resolve query ``metric_params``).
+    derived_metric_reference: Optional[MetricReference] = None
 
     def __post_init__(self) -> None:  # noqa: D105
         assert is_sorted(self.metric_references)
@@ -47,7 +49,12 @@ class WhereFilterLocation(SerializableDataclass):
         return WhereFilterLocation(metric_references=(metric_reference,), location_type=WhereFilterLocationType.METRIC)
 
     @staticmethod
-    def for_input_metric(input_metric_reference: MetricReference) -> WhereFilterLocation:  # noqa: D102
+    def for_input_metric(
+        input_metric_reference: MetricReference,
+        derived_metric_reference: Optional[MetricReference] = None,
+    ) -> WhereFilterLocation:  # noqa: D102
         return WhereFilterLocation(
-            metric_references=(input_metric_reference,), location_type=WhereFilterLocationType.INPUT_METRIC
+            metric_references=(input_metric_reference,),
+            location_type=WhereFilterLocationType.INPUT_METRIC,
+            derived_metric_reference=derived_metric_reference,
         )
