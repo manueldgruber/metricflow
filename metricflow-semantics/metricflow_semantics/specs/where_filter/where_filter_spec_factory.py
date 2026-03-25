@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import List, Optional, Sequence
 
 import jinja2
+from dbt_semantic_interfaces.references import MetricReference
 from dbt_semantic_interfaces.implementations.filters.where_filter import PydanticWhereFilterIntersection
 from dbt_semantic_interfaces.protocols import WhereFilter, WhereFilterIntersection
 
@@ -42,12 +43,14 @@ class WhereFilterSpecFactory:
         custom_grain_names: Sequence[str],
         metric_lookup: Optional[MetricLookup] = None,
         metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
+        queried_metric_references: Optional[Sequence[MetricReference]] = None,
     ) -> None:
         self._column_association_resolver = column_association_resolver
         self._spec_resolution_lookup = spec_resolution_lookup
         self._custom_grain_names = tuple(custom_grain_names)
         self._metric_lookup = metric_lookup
         self._metric_params = metric_params
+        self._queried_metric_references = queried_metric_references
 
     def create_from_where_filter(  # noqa: D102
         self,
@@ -111,6 +114,7 @@ class WhereFilterSpecFactory:
                         location=filter_location,
                         metric_params=self._metric_params,
                         metric_lookup=self._metric_lookup,
+                        queried_metric_references=self._queried_metric_references,
                     )
                     if jinja_params is not None:
                         render_context["params"] = jinja_params

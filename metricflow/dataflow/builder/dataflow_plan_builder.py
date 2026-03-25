@@ -234,6 +234,7 @@ class DataflowPlanBuilder:
             custom_grain_names=self._semantic_model_lookup.custom_granularity_names,
             metric_lookup=self._metric_lookup,
             metric_params=query_spec.metric_params,
+            queried_metric_references=tuple(metric_spec.reference for metric_spec in query_spec.metric_specs),
         )
 
         query_level_filter_specs = tuple(
@@ -938,6 +939,7 @@ class DataflowPlanBuilder:
                 custom_grain_names=self._semantic_model_lookup.custom_granularity_names,
                 metric_lookup=self._metric_lookup,
                 metric_params=base_query_spec.metric_params,
+                queried_metric_references=tuple(metric_spec.reference for metric_spec in base_query_spec.metric_specs),
             )
 
             query_level_filter_specs = filter_spec_factory.create_from_where_filter_intersection(

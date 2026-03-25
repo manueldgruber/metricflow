@@ -4,12 +4,12 @@ import itertools
 import logging
 from collections import defaultdict
 from collections.abc import Mapping
-from typing import Dict, List, Optional, Sequence, Set, Union
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from dbt_semantic_interfaces.call_parameter_sets import JinjaCallParameterSets, MetricCallParameterSet
 from dbt_semantic_interfaces.implementations.filters.where_filter import PydanticWhereFilterIntersection
 from dbt_semantic_interfaces.protocols import WhereFilter
-from dbt_semantic_interfaces.references import EntityReference
+from dbt_semantic_interfaces.references import EntityReference, MetricReference
 from typing_extensions import override
 
 from metricflow_semantics.model.semantic_manifest_lookup import SemanticManifestLookup
@@ -92,12 +92,19 @@ class WhereFilterSpecResolver:
         # noinspection PyArgumentList
         return self._resolve_lookup()
 
+    def _queried_metric_references(self) -> Tuple[MetricReference, ...]:
+        sink = self._resolution_dag.sink_node
+        if isinstance(sink, QueryGroupByItemResolutionNode):
+            return tuple(sink.metrics_in_query)
+        return ()
+
     @log_runtime()
     def _resolve_lookup(self) -> FilterSpecResolutionLookUp:
         visitor = _ResolveWhereFilterSpecVisitor(
             manifest_lookup=self._manifest_lookup,
             spec_pattern_factory=self.spec_pattern_factory,
             metric_params=self._metric_params,
+            queried_metric_references=self._queried_metric_references(),
         )
         return self._resolution_dag.sink_node.accept(visitor)
 
@@ -115,11 +122,13 @@ class _ResolveWhereFilterSpecVisitor(GroupByItemResolutionNodeVisitor[FilterSpec
         manifest_lookup: SemanticManifestLookup,
         spec_pattern_factory: WhereFilterPatternFactory,
         metric_params: Optional[Mapping[str, Mapping[str, str]]] = None,
+        queried_metric_references: Tuple[MetricReference, ...] = (),
     ) -> None:
         self._manifest_lookup = manifest_lookup
         self._path_from_start_node_tracker = DagTraversalPathTracker()
         self._spec_pattern_factory = spec_pattern_factory
         self._metric_params = metric_params
+        self._queried_metric_references = queried_metric_references
 
     @staticmethod
     def _dedupe_filter_call_parameter_sets(
@@ -365,6 +374,9 @@ class _ResolveWhereFilterSpecVisitor(GroupByItemResolutionNodeVisitor[FilterSpec
                 location=location,
                 metric_params=self._metric_params,
                 metric_lookup=self._manifest_lookup.metric_lookup,
+                queried_metric_references=self._queried_metric_references
+                if self._queried_metric_references
+                else None,
             )
             for where_filter in where_filters:
                 try:
