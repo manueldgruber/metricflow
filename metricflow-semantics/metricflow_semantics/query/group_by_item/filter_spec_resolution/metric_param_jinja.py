@@ -14,6 +14,22 @@ from metricflow_semantics.query.group_by_item.filter_spec_resolution.filter_loca
 )
 
 
+def _merge_single_metric_metric_params_fallback(
+    metric_params: Optional[Mapping[str, Mapping[str, str]]],
+    into: Dict[str, str],
+) -> None:
+    """If named lookups produced no bindings but the request has exactly one metric's param map, merge it.
+
+    Covers cases where ``metric_params`` is keyed by the queried metric (e.g. a ratio) while the filter is
+    resolved under a different manifest name (simple input), and location-based keys did not overlap.
+    """
+    if into or not metric_params or len(metric_params) != 1:
+        return
+    only_values = next(iter(metric_params.values()))
+    if only_values:
+        into.update(only_values)
+
+
 def resolved_jinja_params_for_manifest_metric(
     manifest_metric_name: str,
     metric_params: Optional[Mapping[str, Mapping[str, str]]],
@@ -29,6 +45,7 @@ def resolved_jinja_params_for_manifest_metric(
     params_by_metric = metric_params or {}
     for mname in value_lookup_metric_names:
         provided.update(params_by_metric.get(mname, {}))
+    _merge_single_metric_metric_params_fallback(metric_params, provided)
     try:
         metric = metric_lookup.get_metric(MetricReference(element_name=manifest_metric_name))
     except MetricNotFoundError:

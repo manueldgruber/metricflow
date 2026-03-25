@@ -108,10 +108,28 @@ def test_metric_level_filter_inherits_params_from_queried_metric_name(
     )
     assert merged is not None and merged.get("region") == "US"
 
+    # Two outer keys disables single-metric fallback; without queried refs, inner name does not match any lookup key.
     without_queried = jinja_params_for_where_filter_location(
         location=location,
-        metric_params={"bookings_with_region": {"region": "US"}},
+        metric_params={
+            "bookings_with_region": {"region": "US"},
+            "_unused_second_key": {},
+        },
         metric_lookup=ml.metric_lookup,
         queried_metric_references=None,
     )
     assert without_queried is None
+
+
+def test_single_metric_param_fallback_when_manifest_name_mismatches_key(
+    bookings_with_param_parser: MetricFlowQueryParser,
+) -> None:
+    """Single-key metric_params still applies when METRIC location name does not match the outer key."""
+    ml = bookings_with_param_parser._manifest_lookup
+    jp = jinja_params_for_where_filter_location(
+        location=WhereFilterLocation.for_metric(MetricReference(element_name="some_other_metric_name")),
+        metric_params={"bookings_with_region": {"region": "US"}},
+        metric_lookup=ml.metric_lookup,
+        queried_metric_references=None,
+    )
+    assert jp is not None and jp.get("region") == "US"
