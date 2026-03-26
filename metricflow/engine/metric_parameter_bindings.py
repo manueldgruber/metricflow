@@ -11,11 +11,12 @@ from dbt_semantic_interfaces.type_enums import ParameterType
 from metricflow_semantics.errors.error_classes import InvalidQueryException
 
 PARAMETER_REFERENCE_PATTERN = re.compile(r"\{\{\s*parameter\(\s*'([^']+)'\s*\)\s*\}\}")
+MetricParameterValue = str | Mapping[str, str]
 
 
 def bind_metric_parameters(
     semantic_manifest: SemanticManifest,
-    parameter_values: Mapping[str, str],
+    parameter_values: Mapping[str, MetricParameterValue],
     target_metric_names: Sequence[str],
 ) -> PydanticSemanticManifest:
     """Return a manifest copy with bound metric parameter references."""
@@ -23,18 +24,12 @@ def bind_metric_parameters(
     if not isinstance(manifest, PydanticSemanticManifest):
         manifest = PydanticSemanticManifest.parse_obj(manifest.dict())  # type: ignore[attr-defined]
 
-    known_parameter_names = {
-        parameter.name
-        for metric in manifest.metrics
-        for parameter in metric.parameters
-    }
-    unknown_parameter_names = sorted(set(parameter_values).difference(known_parameter_names))
-    if unknown_parameter_names:
-        raise InvalidQueryException(
-            f"Unknown metric parameter(s): {', '.join(repr(name) for name in unknown_parameter_names)}"
-        )
-
     target_metric_names_set = _collect_metric_dependency_names(manifest, target_metric_names)
+    _validate_parameter_bindings(
+        manifest=manifest,
+        parameter_values=parameter_values,
+        target_metric_names_set=target_metric_names_set,
+    )
 
     for metric in manifest.metrics:
         if not metric.parameters:
@@ -52,11 +47,20 @@ def bind_metric_parameters(
 def _resolve_parameter_values(
     metric_name: str,
     parameters: Sequence[Any],
-    raw_parameter_values: Mapping[str, str],
+    raw_parameter_values: Mapping[str, MetricParameterValue],
 ) -> dict[str, Any]:
+    global_parameter_values: dict[str, str] = {}
+    scoped_parameter_values: dict[str, str] = {}
+    for key, value in raw_parameter_values.items():
+        if isinstance(value, Mapping):
+            if key == metric_name:
+                scoped_parameter_values = dict(value)
+            continue
+        global_parameter_values[key] = value
+
     resolved_values: dict[str, Any] = {}
     for parameter in parameters:
-        raw_value = raw_parameter_values.get(parameter.name)
+        raw_value = scoped_parameter_values.get(parameter.name, global_parameter_values.get(parameter.name))
         if raw_value is None:
             if parameter.default is not None:
                 resolved_values[parameter.name] = parameter.default
@@ -69,6 +73,47 @@ def _resolve_parameter_values(
         coerced_value = _coerce_parameter_value(metric_name=metric_name, parameter=parameter, raw_value=raw_value)
         resolved_values[parameter.name] = coerced_value
     return resolved_values
+
+
+def _validate_parameter_bindings(
+    manifest: PydanticSemanticManifest,
+    parameter_values: Mapping[str, MetricParameterValue],
+    target_metric_names_set: set[str],
+) -> None:
+    metrics_by_name = {metric.name: metric for metric in manifest.metrics}
+    target_metrics = [metrics_by_name[name] for name in target_metric_names_set if name in metrics_by_name]
+    valid_global_parameter_names = {
+        parameter.name for metric in target_metrics for parameter in metric.parameters
+    }
+
+    unknown_global_parameter_names = sorted(
+        key
+        for key, value in parameter_values.items()
+        if not isinstance(value, Mapping) and key not in valid_global_parameter_names
+    )
+    if unknown_global_parameter_names:
+        raise InvalidQueryException(
+            f"Unknown metric parameter(s): {', '.join(repr(name) for name in unknown_global_parameter_names)}"
+        )
+
+    for metric_name, scoped_values in parameter_values.items():
+        if not isinstance(scoped_values, Mapping):
+            continue
+        if metric_name not in target_metric_names_set:
+            raise InvalidQueryException(
+                f"Unknown metric parameter scope {metric_name!r}. Scoped bindings must target a queried metric or one "
+                "of its metric dependencies."
+            )
+        metric = metrics_by_name.get(metric_name)
+        if metric is None:
+            raise InvalidQueryException(f"Unknown metric parameter scope {metric_name!r}.")
+        valid_parameter_names = {parameter.name for parameter in metric.parameters}
+        unknown_scoped_parameter_names = sorted(set(scoped_values).difference(valid_parameter_names))
+        if unknown_scoped_parameter_names:
+            raise InvalidQueryException(
+                f"Unknown metric parameter(s) for metric {metric_name!r}: "
+                f"{', '.join(repr(name) for name in unknown_scoped_parameter_names)}"
+            )
 
 
 def _collect_metric_dependency_names(

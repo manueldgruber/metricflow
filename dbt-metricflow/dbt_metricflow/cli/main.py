@@ -217,7 +217,11 @@ def query(
         time_constraint_end=end_time,
         where_constraints=[where] if where else None,
         order_by_names=order,
-        metric_parameter_values=parse_metric_parameters(metric_parameters),
+        metric_parameter_values=parse_metric_parameters(
+            metric_parameters,
+            metric_names=metrics,
+            saved_query_name=saved_query,
+        ),
     )
 
     explain_result: Optional[MetricFlowExplainResult] = None

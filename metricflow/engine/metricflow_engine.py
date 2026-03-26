@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 from dbt_semantic_interfaces.enum_extension import assert_values_exhausted
 from dbt_semantic_interfaces.implementations.elements.dimension import PydanticDimensionTypeParams
@@ -124,6 +124,9 @@ class MetricFlowQueryType(Enum):
     DIMENSION_VALUES = "dimension_values"
 
 
+MetricParameterValue = Union[str, Mapping[str, str]]
+
+
 @dataclass(frozen=True)
 class MetricFlowQueryRequest:
     """Encapsulates the parameters for a metric query.
@@ -160,7 +163,7 @@ class MetricFlowQueryRequest:
     where_constraints: Optional[Sequence[str]]
     order_by_names: Optional[Sequence[str]]
     order_by: Optional[Sequence[OrderByQueryParameter]]
-    metric_parameter_values: Optional[Mapping[str, str]]
+    metric_parameter_values: Optional[Mapping[str, MetricParameterValue]]
     min_max_only: bool
     apply_group_by: bool
     sql_optimization_level: SqlOptimizationLevel
@@ -182,7 +185,7 @@ class MetricFlowQueryRequest:
         where_constraints: Optional[Sequence[str]] = None,
         order_by_names: Optional[Sequence[str]] = None,
         order_by: Optional[Sequence[OrderByQueryParameter]] = None,
-        metric_parameter_values: Optional[Mapping[str, str]] = None,
+        metric_parameter_values: Optional[Mapping[str, MetricParameterValue]] = None,
         sql_optimization_level: Optional[SqlOptimizationLevel] = None,
         dataflow_plan_optimizations: Optional[Set[DataflowPlanOptimization]] = None,
         query_type: MetricFlowQueryType = MetricFlowQueryType.METRIC,
@@ -203,7 +206,14 @@ class MetricFlowQueryRequest:
             where_constraints=where_constraints,
             order_by_names=order_by_names,
             order_by=order_by,
-            metric_parameter_values=dict(metric_parameter_values) if metric_parameter_values is not None else None,
+            metric_parameter_values=(
+                {
+                    key: dict(value) if isinstance(value, Mapping) else value
+                    for key, value in metric_parameter_values.items()
+                }
+                if metric_parameter_values is not None
+                else None
+            ),
             sql_optimization_level=sql_optimization_level
             if sql_optimization_level is not None
             else SqlOptimizationLevel.default_level(),

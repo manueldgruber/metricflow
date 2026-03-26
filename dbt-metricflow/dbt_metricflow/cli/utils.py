@@ -7,7 +7,7 @@ import pathlib
 import textwrap
 import traceback
 from functools import update_wrapper, wraps
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Union
 
 import click
 from dateutil.parser import parse
@@ -19,6 +19,8 @@ from dbt_metricflow.cli.cli_link import CliLink
 from dbt_metricflow.cli.cli_string import CLIString
 
 logger = logging.getLogger(__name__)
+
+MetricParameterValue = Union[str, Dict[str, str]]
 
 
 # Click Options
@@ -32,10 +34,12 @@ def query_options(function: Callable) -> Callable:
         type=str,
         default=(),
         help=(
-            "Bind a metric parameter using key=value syntax. Repeat the flag for multiple bindings.\n\n"
+            "Bind a metric parameter using key=value or metric_name.key=value syntax. "
+            "Repeat the flag for multiple bindings.\n\n"
             "Examples:\n\n"
             "  --parameter percentile=0.95\n"
             "  --param percentile=0.95\n"
+            "  --parameter revenue.percentile=0.95 --parameter margin.percentile=0.9\n"
             "  --parameter numerator_to=buy --parameter denominator_from=visit"
         ),
     )(function)
@@ -152,18 +156,62 @@ def validate_limit(limit: Optional[str]) -> Optional[int]:
     return int(limit) if limit else None
 
 
-def parse_metric_parameters(metric_parameters: Sequence[str]) -> Optional[Dict[str, str]]:
-    """Parse repeated key=value CLI parameter bindings."""
-    parsed: Dict[str, str] = {}
+def parse_metric_parameters(
+    metric_parameters: Sequence[str],
+    metric_names: Optional[Sequence[str]] = None,
+    saved_query_name: Optional[str] = None,
+) -> Optional[Dict[str, MetricParameterValue]]:
+    """Parse repeated CLI parameter bindings."""
+    del saved_query_name
+    parsed: Dict[str, MetricParameterValue] = {}
+    selected_metric_names = set(metric_names or ())
     for raw_parameter in metric_parameters:
         if "=" not in raw_parameter:
             raise click.BadParameter(
-                f"Invalid parameter binding {raw_parameter!r}. Expected key=value syntax."
+                f"Invalid parameter binding {raw_parameter!r}. Expected key=value or metric_name.key=value syntax."
             )
         key, value = raw_parameter.split("=", 1)
         key = key.strip()
         if not key:
             raise click.BadParameter(f"Invalid parameter binding {raw_parameter!r}. Parameter name cannot be empty.")
+        if "." in key:
+            metric_name, parameter_name = key.split(".", 1)
+            metric_name = metric_name.strip()
+            parameter_name = parameter_name.strip()
+            if not metric_name or not parameter_name:
+                raise click.BadParameter(
+                    f"Invalid parameter binding {raw_parameter!r}. Expected metric_name.key=value syntax."
+                )
+            if selected_metric_names and metric_name not in selected_metric_names:
+                raise click.BadParameter(
+                    f"Invalid parameter binding {raw_parameter!r}. Metric {metric_name!r} is not in --metrics."
+                )
+            bucket = parsed.get(metric_name)
+            if bucket is None:
+                bucket = {}
+                parsed[metric_name] = bucket
+            elif not isinstance(bucket, dict):
+                raise click.BadParameter(
+                    f"Invalid parameter binding {raw_parameter!r}. {metric_name!r} is already used as an unscoped "
+                    "parameter name."
+                )
+            if parameter_name in bucket:
+                raise click.BadParameter(
+                    f"Invalid parameter binding {raw_parameter!r}. Parameter {parameter_name!r} was already set for "
+                    f"metric {metric_name!r}."
+                )
+            bucket[parameter_name] = value
+            continue
+
+        existing_value = parsed.get(key)
+        if isinstance(existing_value, dict):
+            raise click.BadParameter(
+                f"Invalid parameter binding {raw_parameter!r}. {key!r} is already used as a metric scope."
+            )
+        if existing_value is not None:
+            raise click.BadParameter(
+                f"Invalid parameter binding {raw_parameter!r}. Parameter {key!r} was already set."
+            )
         parsed[key] = value
     return parsed or None
 
