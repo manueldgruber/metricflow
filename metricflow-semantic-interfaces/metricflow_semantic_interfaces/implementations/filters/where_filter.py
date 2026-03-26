@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import textwrap
 import traceback
 from typing import Callable, Generator, List, Sequence, Tuple
@@ -19,6 +20,8 @@ from metricflow_semantic_interfaces.parsing.where_filter.jinja_object_parser imp
     JinjaObjectParser,
     QueryItemLocation,
 )
+
+PARAMETER_REFERENCE_PATTERN = re.compile(r"\{\{\s*parameter\(\s*'[^']+'\s*\)\s*\}\}")
 
 
 class PydanticWhereFilter(PydanticCustomInputParser, HashableBaseModel):
@@ -52,7 +55,7 @@ class PydanticWhereFilter(PydanticCustomInputParser, HashableBaseModel):
 
     def call_parameter_sets(self, custom_granularity_names: Sequence[str]) -> JinjaCallParameterSets:  # noqa: D102
         return JinjaObjectParser.parse_call_parameter_sets(
-            where_sql_template=self.where_sql_template,
+            where_sql_template=PARAMETER_REFERENCE_PATTERN.sub("__metric_parameter__", self.where_sql_template),
             custom_granularity_names=custom_granularity_names,
             query_item_location=QueryItemLocation.NON_ORDER_BY,
         )
