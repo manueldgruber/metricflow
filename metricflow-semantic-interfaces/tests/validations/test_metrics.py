@@ -66,23 +66,25 @@ from tests.validations.validation_test_utils import check_error_in_issues
 
 
 def test_metric_parameters_validation_accepts_valid_parameterized_metric() -> None:
-    metric = metric_with_guaranteed_meta(
-        name="transaction_percentile",
+    metric = PydanticMetric(
+        name="country_metric",
         type=MetricType.SIMPLE,
-        description="P{{ parameter('percentile_label') }} value",
+        description="Metric for {{ parameter('country_label') }}",
         type_params=PydanticMetricTypeParams(
             expr="amount",
             metric_aggregation_params=PydanticMetricAggregationParams(
                 semantic_model="transactions",
-                agg=AggregationType.PERCENTILE,
-                agg_params=PydanticMeasureAggregationParameters(percentile="0.5"),
+                agg=AggregationType.SUM,
+                agg_params=PydanticMeasureAggregationParameters(),
             ),
         ),
         parameters=[
-            PydanticMetricParameter(name="percentile_label", type=ParameterType.INTEGER, default=95, min=0, max=100),
+            PydanticMetricParameter(name="country_label", type=ParameterType.STRING, default="Germany"),
         ],
+        config=None,
+        metadata=None,
     )
-    validation_results = SemanticManifestValidator[PydanticSemanticManifest]([MetricParametersRule()]).validate_semantic_manifest(
+    issues = MetricParametersRule.validate_manifest(
         PydanticSemanticManifest(
             semantic_models=[],
             metrics=[metric],
@@ -90,12 +92,12 @@ def test_metric_parameters_validation_accepts_valid_parameterized_metric() -> No
         )
     )
 
-    assert validation_results.all_issues == []
+    assert issues == []
 
 
 def test_metric_parameters_validation_rejects_unknown_reference() -> None:
-    metric = metric_with_guaranteed_meta(
-        name="transaction_percentile",
+    metric = PydanticMetric(
+        name="country_metric",
         type=MetricType.SIMPLE,
         description="P{{ parameter('missing') }} value",
         type_params=PydanticMetricTypeParams(
@@ -104,8 +106,10 @@ def test_metric_parameters_validation_rejects_unknown_reference() -> None:
                 agg=AggregationType.SUM,
             ),
         ),
+        config=None,
+        metadata=None,
     )
-    validation_results = SemanticManifestValidator[PydanticSemanticManifest]([MetricParametersRule()]).validate_semantic_manifest(
+    issues = MetricParametersRule.validate_manifest(
         PydanticSemanticManifest(
             semantic_models=[],
             metrics=[metric],
@@ -115,13 +119,13 @@ def test_metric_parameters_validation_rejects_unknown_reference() -> None:
 
     check_error_in_issues(
         error_substrings=["references parameter 'missing', but it is not declared"],
-        issues=validation_results.all_issues,
+        issues=issues,
     )
 
 
 def test_metric_parameters_validation_rejects_invalid_default() -> None:
-    metric = metric_with_guaranteed_meta(
-        name="transaction_percentile",
+    metric = PydanticMetric(
+        name="country_metric",
         type=MetricType.SIMPLE,
         type_params=PydanticMetricTypeParams(
             metric_aggregation_params=PydanticMetricAggregationParams(
@@ -130,10 +134,12 @@ def test_metric_parameters_validation_rejects_invalid_default() -> None:
             ),
         ),
         parameters=[
-            PydanticMetricParameter(name="percentile", type=ParameterType.NUMBER, default=2.0, min=0, max=1),
+            PydanticMetricParameter(name="share", type=ParameterType.NUMBER, default=2.0, min=0, max=1),
         ],
+        config=None,
+        metadata=None,
     )
-    validation_results = SemanticManifestValidator[PydanticSemanticManifest]([MetricParametersRule()]).validate_semantic_manifest(
+    issues = MetricParametersRule.validate_manifest(
         PydanticSemanticManifest(
             semantic_models=[],
             metrics=[metric],
@@ -143,7 +149,7 @@ def test_metric_parameters_validation_rejects_invalid_default() -> None:
 
     check_error_in_issues(
         error_substrings=["which is larger than the declared max"],
-        issues=validation_results.all_issues,
+        issues=issues,
     )
 
 

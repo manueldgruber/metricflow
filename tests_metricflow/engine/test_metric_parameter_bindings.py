@@ -6,6 +6,7 @@ from dbt_semantic_interfaces.implementations.metric import (
     PydanticMetric,
     PydanticMetricAggregationParams,
     PydanticMetricInput,
+    PydanticMetricInputMeasure,
     PydanticMetricParameter,
     PydanticMetricTypeParams,
 )
@@ -76,28 +77,35 @@ def test_bind_metric_parameters_rejects_missing_required_parameter() -> None:
         semantic_models=[],
         metrics=[
             PydanticMetric(
-                name="transaction_percentile",
+                name="transactions_for_country",
                 type=MetricType.SIMPLE,
-                label="Transaction percentile",
-                description="transaction percentile metric",
+                label="Transactions for {{ parameter('country') }}",
+                description="transaction filter metric",
                 type_params=PydanticMetricTypeParams(
-                    expr="{{ parameter('percentile') }}",
+                    measure=PydanticMetricInputMeasure(name="transactions"),
                     metric_aggregation_params=PydanticMetricAggregationParams(
                         semantic_model="transactions",
                         agg=AggregationType.SUM,
                     ),
                 ),
+                filter=PydanticWhereFilterIntersection(
+                    where_filters=[
+                        {
+                            "where_sql_template": "{{ Dimension('transaction__country') }} = '{{ parameter('country') }}'"
+                        }
+                    ]
+                ),
                 parameters=[
-                    PydanticMetricParameter(name="percentile", type=ParameterType.NUMBER, required=True),
+                    PydanticMetricParameter(name="country", type=ParameterType.STRING, required=True),
                 ],
             )
         ],
         project_configuration=EXAMPLE_PROJECT_CONFIGURATION,
     )
 
-    with pytest.raises(InvalidQueryException, match="requires parameter 'percentile'"):
+    with pytest.raises(InvalidQueryException, match="requires parameter 'country'"):
         bind_metric_parameters(
             semantic_manifest=semantic_manifest,
             parameter_values={},
-            target_metric_names=["transaction_percentile"],
+            target_metric_names=["transactions_for_country"],
         )
