@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Dict, Generic, List, Literal, Optional, Sequence, Set, Tuple, Union
+from typing import Any, Dict, Generic, List, Literal, Optional, Sequence, Set, Tuple, Union
 
-from metricflow_semantic_interfaces.implementations.metric import PydanticMetric
+from metricflow_semantic_interfaces.implementations.metric import (
+    PydanticMetric,
+    find_parameter_references_in_string,
+)
 from metricflow_semantic_interfaces.protocols import (
     ConversionTypeParams,
     Dimension,
@@ -25,6 +28,7 @@ from metricflow_semantic_interfaces.references import (
 from metricflow_semantic_interfaces.type_enums import (
     AggregationType,
     MetricType,
+    ParameterType,
     TimeGranularity,
 )
 from metricflow_semantic_interfaces.validations.shared_measure_and_metric_helpers import (
@@ -58,6 +62,142 @@ class MetricValidationRuleHelpers:
         return next((metric for metric in semantic_manifest.metrics if metric.name == metric_name), None)
 
     # TODO add a function for default context.
+
+    @staticmethod
+    def default_context_for_metric(metric: Metric) -> MetricContext:
+        """Return the default validation context for a metric."""
+        return MetricContext(
+            file_context=FileContext.from_metadata(metadata=metric.metadata),
+            metric=MetricModelReference(metric_name=metric.name),
+        )
+
+    @staticmethod
+    def validate_metric_parameter_value(
+        parameter_name: str,
+        value: Any,
+        parameter_type: ParameterType,
+    ) -> Optional[str]:
+        """Validate a parameter value against its declared type."""
+        if value is None:
+            return None
+        if parameter_type is ParameterType.STRING:
+            if not isinstance(value, str):
+                return f"Parameter '{parameter_name}' must be a string."
+        elif parameter_type is ParameterType.INTEGER:
+            if not isinstance(value, int) or isinstance(value, bool):
+                return f"Parameter '{parameter_name}' must be an integer."
+        elif parameter_type is ParameterType.NUMBER:
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                return f"Parameter '{parameter_name}' must be a number."
+        elif parameter_type is ParameterType.BOOLEAN:
+            if not isinstance(value, bool):
+                return f"Parameter '{parameter_name}' must be a boolean."
+        elif parameter_type is ParameterType.ENUM:
+            if not isinstance(value, (str, int, float, bool)):
+                return f"Parameter '{parameter_name}' must be a scalar value."
+        return None
+
+    @staticmethod
+    def _collect_referenced_parameters(node: Any, skip_top_level_name: bool = False) -> Set[str]:
+        references: Set[str] = set()
+        if isinstance(node, str):
+            references.update(find_parameter_references_in_string(node))
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                if skip_top_level_name and key == "name":
+                    continue
+                references.update(MetricValidationRuleHelpers._collect_referenced_parameters(value))
+        elif isinstance(node, list):
+            for item in node:
+                references.update(MetricValidationRuleHelpers._collect_referenced_parameters(item))
+        return references
+
+
+class MetricParametersRule(SemanticManifestValidationRule[SemanticManifestT], Generic[SemanticManifestT]):
+    """Checks parameterized metric declarations and references."""
+
+    @staticmethod
+    @validate_safely(whats_being_done="running model validation ensuring metric parameters are valid")
+    def validate_manifest(semantic_manifest: SemanticManifestT) -> Sequence[ValidationIssue]:  # noqa: D102
+        issues: List[ValidationIssue] = []
+
+        for metric in semantic_manifest.metrics or []:
+            metric_context = MetricValidationRuleHelpers.default_context_for_metric(metric)
+            parameter_names_seen: Set[str] = set()
+
+            for parameter in metric.parameters:
+                if parameter.name in parameter_names_seen:
+                    issues.append(
+                        ValidationError(
+                            context=metric_context,
+                            message=f"Metric '{metric.name}' declares parameter '{parameter.name}' more than once.",
+                        )
+                    )
+                    continue
+                parameter_names_seen.add(parameter.name)
+
+                type_issue = MetricValidationRuleHelpers.validate_metric_parameter_value(
+                    parameter_name=parameter.name,
+                    value=parameter.default,
+                    parameter_type=parameter.type,
+                )
+                if type_issue is not None:
+                    issues.append(ValidationError(context=metric_context, message=type_issue))
+                    continue
+
+                if parameter.allowed_values is not None and parameter.default is not None:
+                    if parameter.default not in parameter.allowed_values:
+                        issues.append(
+                            ValidationError(
+                                context=metric_context,
+                                message=(
+                                    f"Metric '{metric.name}' parameter '{parameter.name}' has default "
+                                    f"{parameter.default!r}, which is not one of the allowed values "
+                                    f"{parameter.allowed_values!r}."
+                                ),
+                            )
+                        )
+
+                if parameter.type in (ParameterType.INTEGER, ParameterType.NUMBER):
+                    if parameter.min is not None and parameter.default is not None and parameter.default < parameter.min:
+                        issues.append(
+                            ValidationError(
+                                context=metric_context,
+                                message=(
+                                    f"Metric '{metric.name}' parameter '{parameter.name}' has default "
+                                    f"{parameter.default!r}, which is smaller than the declared min of "
+                                    f"{parameter.min!r}."
+                                ),
+                            )
+                        )
+                    if parameter.max is not None and parameter.default is not None and parameter.default > parameter.max:
+                        issues.append(
+                            ValidationError(
+                                context=metric_context,
+                                message=(
+                                    f"Metric '{metric.name}' parameter '{parameter.name}' has default "
+                                    f"{parameter.default!r}, which is larger than the declared max of "
+                                    f"{parameter.max!r}."
+                                ),
+                            )
+                        )
+
+            referenced_parameter_names = MetricValidationRuleHelpers._collect_referenced_parameters(
+                metric.dict(), skip_top_level_name=True
+            )
+            unknown_parameter_names = referenced_parameter_names.difference(parameter_names_seen)
+            for parameter_name in sorted(unknown_parameter_names):
+                issues.append(
+                    ValidationError(
+                        context=metric_context,
+                        message=(
+                            f"Metric '{metric.name}' references parameter '{parameter_name}', but it is not declared "
+                            "in the metric's parameters block."
+                        ),
+                    )
+                )
+
+        return issues
 
 
 class CumulativeMetricRule(SemanticManifestValidationRule[SemanticManifestT], Generic[SemanticManifestT]):

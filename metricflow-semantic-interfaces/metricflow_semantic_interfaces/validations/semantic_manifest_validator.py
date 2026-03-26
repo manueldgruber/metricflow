@@ -29,6 +29,7 @@ from metricflow_semantic_interfaces.validations.metrics import (
     ConversionMetricRule,
     CumulativeMetricRule,
     DerivedMetricRule,
+    MetricParametersRule,
 )
 from metricflow_semantic_interfaces.validations.non_empty import NonEmptyRule
 from metricflow_semantic_interfaces.validations.primary_entity import PrimaryEntityRule
@@ -89,6 +90,7 @@ class SemanticManifestValidator(Generic[SemanticManifestT]):
         PrimaryEntityRule[SemanticManifestT](),
         PrimaryEntityDimensionPairs[SemanticManifestT](),
         WhereFiltersAreParseable[SemanticManifestT](),
+        MetricParametersRule[SemanticManifestT](),
         SavedQueryRule[SemanticManifestT](),
         MetricLabelsRule[SemanticManifestT](),
         SemanticModelLabelsRule[SemanticManifestT](),

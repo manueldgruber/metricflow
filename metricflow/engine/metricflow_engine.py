@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence, Set
+from collections.abc import Iterable, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -66,6 +66,7 @@ from metricflow.dataset.convert_semantic_model import SemanticModelToDataSetConv
 from metricflow.dataset.dataset_classes import DataSet
 from metricflow.dataset.semantic_model_adapter import SemanticModelDataSet
 from metricflow.engine.models import Dimension, Entity, Metric, SavedQuery, SearchableElement
+from metricflow.engine.metric_parameter_bindings import bind_metric_parameters
 from metricflow.engine.time_source import ServerTimeSource
 from metricflow.execution.convert_to_execution_plan import ConvertToExecutionPlanResult
 from metricflow.execution.dataflow_to_execution import (
@@ -159,6 +160,7 @@ class MetricFlowQueryRequest:
     where_constraints: Optional[Sequence[str]]
     order_by_names: Optional[Sequence[str]]
     order_by: Optional[Sequence[OrderByQueryParameter]]
+    metric_parameter_values: Optional[Mapping[str, str]]
     min_max_only: bool
     apply_group_by: bool
     sql_optimization_level: SqlOptimizationLevel
@@ -180,6 +182,7 @@ class MetricFlowQueryRequest:
         where_constraints: Optional[Sequence[str]] = None,
         order_by_names: Optional[Sequence[str]] = None,
         order_by: Optional[Sequence[OrderByQueryParameter]] = None,
+        metric_parameter_values: Optional[Mapping[str, str]] = None,
         sql_optimization_level: Optional[SqlOptimizationLevel] = None,
         dataflow_plan_optimizations: Optional[Set[DataflowPlanOptimization]] = None,
         query_type: MetricFlowQueryType = MetricFlowQueryType.METRIC,
@@ -200,6 +203,7 @@ class MetricFlowQueryRequest:
             where_constraints=where_constraints,
             order_by_names=order_by_names,
             order_by=order_by,
+            metric_parameter_values=dict(metric_parameter_values) if metric_parameter_values is not None else None,
             sql_optimization_level=sql_optimization_level
             if sql_optimization_level is not None
             else SqlOptimizationLevel.default_level(),
@@ -226,6 +230,31 @@ class MetricFlowQueryRequest:
             where_constraints=self.where_constraints,
             order_by_names=self.order_by_names,
             order_by=self.order_by,
+            metric_parameter_values=self.metric_parameter_values,
+            min_max_only=self.min_max_only,
+            apply_group_by=self.apply_group_by,
+            sql_optimization_level=self.sql_optimization_level,
+            dataflow_plan_optimizations=self.dataflow_plan_optimizations,
+            query_type=self.query_type,
+            order_output_columns_by_input_order=self.order_output_columns_by_input_order,
+        )
+
+    def without_metric_parameter_values(self) -> MetricFlowQueryRequest:
+        """Return a copy of the request without metric parameter bindings."""
+        return MetricFlowQueryRequest(
+            request_id=self.request_id,
+            saved_query_name=self.saved_query_name,
+            metric_names=self.metric_names,
+            metrics=self.metrics,
+            group_by_names=self.group_by_names,
+            group_by=self.group_by,
+            limit=self.limit,
+            time_constraint_start=self.time_constraint_start,
+            time_constraint_end=self.time_constraint_end,
+            where_constraints=self.where_constraints,
+            order_by_names=self.order_by_names,
+            order_by=self.order_by,
+            metric_parameter_values=None,
             min_max_only=self.min_max_only,
             apply_group_by=self.apply_group_by,
             sql_optimization_level=self.sql_optimization_level,
@@ -539,6 +568,36 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
         return TimeRangeConstraint.all_time()
 
     def _create_execution_plan(self, mf_query_request: MetricFlowQueryRequest) -> MetricFlowExplainResult:
+        if mf_query_request.metric_parameter_values:
+            target_metric_names = list(mf_query_request.metric_names or ())
+            if mf_query_request.metrics is not None:
+                target_metric_names.extend(metric_parameter.name for metric_parameter in mf_query_request.metrics)
+            if mf_query_request.saved_query_name is not None:
+                matching_saved_query = next(
+                    (
+                        saved_query
+                        for saved_query in self._semantic_manifest_lookup.semantic_manifest.saved_queries
+                        if saved_query.name == mf_query_request.saved_query_name
+                    ),
+                    None,
+                )
+                if matching_saved_query is not None:
+                    target_metric_names.extend(matching_saved_query.query_params.metrics)
+
+            bound_manifest = bind_metric_parameters(
+                semantic_manifest=self._semantic_manifest_lookup.semantic_manifest,
+                parameter_values=mf_query_request.metric_parameter_values,
+                target_metric_names=target_metric_names,
+            )
+            bound_engine = MetricFlowEngine(
+                semantic_manifest_lookup=SemanticManifestLookup(bound_manifest),
+                sql_client=self._sql_client,
+                time_source=self._time_source,
+                column_association_resolver=self._column_association_resolver,
+                consistent_id_enumeration=self._reset_id_enumeration,
+            )
+            return bound_engine._create_execution_plan(mf_query_request.without_metric_parameter_values())
+
         if self._reset_id_enumeration:
             logger.debug(
                 LazyFormat(

@@ -7,7 +7,7 @@ import pathlib
 import textwrap
 import traceback
 from functools import update_wrapper, wraps
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import click
 from dateutil.parser import parse
@@ -24,6 +24,21 @@ logger = logging.getLogger(__name__)
 # Click Options
 def query_options(function: Callable) -> Callable:
     """Common options for a query."""
+    function = click.option(
+        "--parameter",
+        "--param",
+        "metric_parameters",
+        multiple=True,
+        type=str,
+        default=(),
+        help=(
+            "Bind a metric parameter using key=value syntax. Repeat the flag for multiple bindings.\n\n"
+            "Examples:\n\n"
+            "  --parameter percentile=0.95\n"
+            "  --param percentile=0.95\n"
+            "  --parameter numerator_to=buy --parameter denominator_from=visit"
+        ),
+    )(function)
     function = click.option(
         "--order",
         type=click_custom.SequenceParamType(),
@@ -135,6 +150,22 @@ def validate_limit(limit: Optional[str]) -> Optional[int]:
     if limit and not limit.isnumeric():
         raise click.BadParameter("limit must be an int. For no limit, do not pass this argument")
     return int(limit) if limit else None
+
+
+def parse_metric_parameters(metric_parameters: Sequence[str]) -> Optional[Dict[str, str]]:
+    """Parse repeated key=value CLI parameter bindings."""
+    parsed: Dict[str, str] = {}
+    for raw_parameter in metric_parameters:
+        if "=" not in raw_parameter:
+            raise click.BadParameter(
+                f"Invalid parameter binding {raw_parameter!r}. Expected key=value syntax."
+            )
+        key, value = raw_parameter.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise click.BadParameter(f"Invalid parameter binding {raw_parameter!r}. Parameter name cannot be empty.")
+        parsed[key] = value
+    return parsed or None
 
 
 def echo_semantic_manifest_context(cli_configuration: CLIConfiguration) -> None:

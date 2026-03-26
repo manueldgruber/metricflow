@@ -32,6 +32,7 @@ from dbt_metricflow.cli.tutorial import (
 )
 from dbt_metricflow.cli.utils import (
     exception_handler,
+    parse_metric_parameters,
     query_options,
     start_end_time_options,
 )
@@ -182,6 +183,7 @@ def query(
     start_time: Optional[dt.datetime] = None,
     end_time: Optional[dt.datetime] = None,
     order: Optional[List[str]] = None,
+    metric_parameters: Sequence[str] = (),
     limit: Optional[int] = None,
     csv: Optional[Path] = None,
     explain: bool = False,
@@ -215,6 +217,7 @@ def query(
         time_constraint_end=end_time,
         where_constraints=[where] if where else None,
         order_by_names=order,
+        metric_parameter_values=parse_metric_parameters(metric_parameters),
     )
 
     explain_result: Optional[MetricFlowExplainResult] = None

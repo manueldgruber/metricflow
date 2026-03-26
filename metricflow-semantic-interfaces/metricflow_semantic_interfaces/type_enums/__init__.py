@@ -10,6 +10,7 @@ from metricflow_semantic_interfaces.type_enums.date_part import DatePart  # noqa
 from metricflow_semantic_interfaces.type_enums.dimension_type import DimensionType  # noqa:F401
 from metricflow_semantic_interfaces.type_enums.entity_type import EntityType  # noqa:F401
 from metricflow_semantic_interfaces.type_enums.metric_type import MetricType  # noqa:F401
+from metricflow_semantic_interfaces.type_enums.parameter_type import ParameterType  # noqa:F401
 from metricflow_semantic_interfaces.type_enums.period_agg import PeriodAggregation  # noqa:F401
 from metricflow_semantic_interfaces.type_enums.semantic_manifest_node_type import (  # noqa:F401
     SemanticManifestNodeType,

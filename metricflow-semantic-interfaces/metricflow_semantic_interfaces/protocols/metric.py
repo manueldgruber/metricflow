@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Optional, Protocol, Sequence
+from typing import Any, Optional, Protocol, Sequence
 
 from metricflow_semantic_interfaces.protocols.measure import (
     MeasureAggregationParameters,
@@ -15,9 +15,49 @@ from metricflow_semantic_interfaces.type_enums import (
     AggregationType,
     ConversionCalculationType,
     MetricType,
+    ParameterType,
     PeriodAggregation,
     TimeGranularity,
 )
+
+
+class MetricParameter(Protocol):
+    """Declares a runtime-bindable metric parameter."""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def type(self) -> ParameterType:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def required(self) -> bool:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def default(self) -> Optional[Any]:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def allowed_values(self) -> Optional[Sequence[Any]]:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def min(self) -> Optional[float]:  # noqa: D102
+        pass
+
+    @property
+    @abstractmethod
+    def max(self) -> Optional[float]:  # noqa: D102
+        pass
 
 
 class MetricInputMeasure(Protocol):
@@ -422,4 +462,10 @@ class Metric(Protocol):
         - as the default grain for metric_time if no grain is specified
         - as the window function order by when reaggregating cumulative metrics for non-default grains
         """
+        pass
+
+    @property
+    @abstractmethod
+    def parameters(self) -> Sequence[MetricParameter]:
+        """Return runtime-bindable metric parameters."""
         pass

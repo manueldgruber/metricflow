@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 from typing import Any, Dict, List, Optional, Sequence, Set
 
 from msi_pydantic_shim import Field
@@ -33,9 +34,30 @@ from metricflow_semantic_interfaces.type_enums import (
     AggregationType,
     ConversionCalculationType,
     MetricType,
+    ParameterType,
     PeriodAggregation,
     TimeGranularity,
 )
+
+PARAMETER_REFERENCE_PATTERN = re.compile(r"\{\{\s*parameter\(\s*'([^']+)'\s*\)\s*\}\}")
+
+
+def find_parameter_references_in_string(template: str) -> Sequence[str]:
+    """Return parameter reference names found in a templated string."""
+    return tuple(PARAMETER_REFERENCE_PATTERN.findall(template))
+
+
+class PydanticMetricParameter(HashableBaseModel):
+    """Declares a runtime-bindable metric parameter."""
+
+    name: str
+    type: ParameterType
+    required: bool = False
+    default: Optional[Any] = None
+    allowed_values: Optional[List[Any]] = None
+    min: Optional[float] = None
+    max: Optional[float] = None
+    description: Optional[str] = None
 
 
 class PydanticMetricInputMeasure(PydanticCustomInputParser, HashableBaseModel):
@@ -245,6 +267,7 @@ class PydanticMetric(HashableBaseModel, ModelWithMetadataParsing, ProtocolHint[M
     label: Optional[str] = None
     config: Optional[PydanticSemanticLayerElementConfig]
     time_granularity: Optional[str] = None
+    parameters: List[PydanticMetricParameter] = Field(default_factory=list)
 
     @classmethod
     def parse_obj(cls, input: Any) -> PydanticMetric:  # type: ignore[misc]
